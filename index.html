@@ -24,9 +24,22 @@
     </header>
 
     <section class="headline-card">
-      <span id="headlineLabel">Today</span>
+      <div class="headline-topline">
+        <span id="headlineLabel">Today</span>
+        <span id="headlineBadge">No entry</span>
+      </div>
       <strong id="headlineTotal">0</strong>
       <p id="headlineMessage">No entry saved for today yet.</p>
+    </section>
+
+    <section class="mini-strip card">
+      <div class="card-head compact">
+        <div>
+          <h2>Last 7 Days</h2>
+          <p>Quick workload snapshot.</p>
+        </div>
+      </div>
+      <div class="day-bars" id="lastSevenBars"></div>
     </section>
 
     <section class="insights" id="insightsList"></section>
@@ -43,8 +56,8 @@
     <section class="stats-grid">
       <div class="stat-card"><span>Week Total</span><strong id="weekTotal">0</strong></div>
       <div class="stat-card"><span>Week Average</span><strong id="weekAverage">0</strong></div>
-      <div class="stat-card"><span>Vs Last Week Avg</span><strong id="weekAverageChange">—</strong></div>
-      <div class="stat-card"><span>Best Day Ever</span><strong id="bestDayEver">0</strong></div>
+      <div class="stat-card trend-card"><span>Vs Last Week Avg</span><strong id="weekAverageChange">—</strong></div>
+      <div class="stat-card record-card"><span>Best Day Ever</span><strong id="bestDayEver">0</strong></div>
       <div class="stat-card"><span>One-Round Avg</span><strong id="oneRoundAverage">0</strong></div>
       <div class="stat-card"><span>Two-Round Avg</span><strong id="twoRoundAverage">0</strong></div>
       <div class="stat-card"><span>Workdays Logged</span><strong id="daysLogged">0</strong></div>

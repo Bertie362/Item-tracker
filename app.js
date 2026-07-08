@@ -55,6 +55,8 @@ const historyFilter = $("historyFilter");
 const headlineLabel = $("headlineLabel");
 const headlineTotal = $("headlineTotal");
 const headlineMessage = $("headlineMessage");
+const headlineBadge = $("headlineBadge");
+const lastSevenBars = $("lastSevenBars");
 const insightsList = $("insightsList");
 
 const weekTotal = $("weekTotal");
@@ -375,6 +377,7 @@ function renderDashboard(entries) {
   const selectedWeekWorkingEntries = selectedWeekEntries.filter(entry => isWorkingDay(entry.date));
 
   renderHeadline(entries, todayEntry);
+  renderLastSevenBars(entries);
   renderInsights(entries, todayEntry, selectedWeekEntries);
 
   const thisWeekTotal = sum(selectedWeekEntries);
@@ -424,70 +427,167 @@ function renderDashboard(entries) {
 }
 
 function renderHeadline(entries, todayEntry) {
+  const today = todayISO();
+  const todayDate = new Date(today + "T00:00:00");
+  const weekdayName = todayDate.toLocaleDateString("en-GB", { weekday: "long" });
+
   headlineLabel.textContent = "Today";
   headlineTotal.textContent = todayEntry ? todayEntry.totalTracked : 0;
+  headlineBadge.textContent = todayEntry ? "Logged" : "No entry";
 
   if (!entries.length) {
-    headlineMessage.textContent = "No entries yet. Tap + Add Day to start.";
+    headlineBadge.textContent = "Start";
+    headlineMessage.textContent = "No entries yet. Tap + Add Day to start building your stats.";
     return;
   }
 
-  if (!isWorkingDay(todayISO())) {
+  if (!isWorkingDay(today)) {
+    headlineBadge.textContent = "Rest day";
     headlineMessage.textContent = "Today is not in your selected working days, so it will not break your streak.";
     return;
   }
 
   if (!todayEntry) {
     const lastEntry = [...entries].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-    headlineMessage.textContent = `Last entry was ${lastEntry.totalTracked} on ${formatShortDate(new Date(lastEntry.date + "T00:00:00"))}.`;
+    headlineMessage.textContent = `No entry for today yet. Last logged day was ${lastEntry.totalTracked} on ${formatShortDate(new Date(lastEntry.date + "T00:00:00"))}.`;
     return;
   }
 
-  const previousEntries = entries.filter(entry => entry.date < todayEntry.date).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const previousEntries = entries
+    .filter(entry => entry.date < todayEntry.date)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  if (!previousEntries.length) {
-    headlineMessage.textContent = "First saved day. Now you have a baseline.";
+  const sameWeekdayPast = entries.filter(entry =>
+    entry.date < todayEntry.date &&
+    new Date(entry.date + "T00:00:00").getDay() === todayDate.getDay()
+  );
+
+  const highest = getHighest(entries);
+
+  if (highest && highest.id === todayEntry.id && entries.length > 1) {
+    headlineBadge.textContent = "New record";
+    headlineMessage.textContent = `Highest day so far — ${todayEntry.totalTracked} tracked items.`;
     return;
   }
 
-  const diff = todayEntry.totalTracked - previousEntries[0].totalTracked;
-  headlineMessage.textContent = `${formatChange(diff).text} from your previous logged day.`;
+  if (sameWeekdayPast.length) {
+    const weekdayAvg = average(sameWeekdayPast);
+    const weekdayDiff = todayEntry.totalTracked - weekdayAvg;
+    const weekdayChange = formatChange(weekdayDiff).text.toLowerCase();
+    headlineMessage.textContent = `${weekdayName}: ${weekdayChange} versus your usual ${weekdayAvg}.`;
+    return;
+  }
+
+  if (previousEntries.length) {
+    const diff = todayEntry.totalTracked - previousEntries[0].totalTracked;
+    headlineMessage.textContent = `${formatChange(diff).text} from your previous logged day.`;
+    return;
+  }
+
+  headlineMessage.textContent = "First saved day. Now you have a baseline.";
+}
+
+function renderLastSevenBars(entries) {
+  if (!lastSevenBars) return;
+
+  const entryMap = new Map(entries.map(entry => [entry.date, entry]));
+  const days = [];
+
+  const today = new Date(todayISO() + "T00:00:00");
+
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - i);
+    const iso = date.toISOString().slice(0, 10);
+    const entry = entryMap.get(iso);
+
+    days.push({
+      iso,
+      label: date.toLocaleDateString("en-GB", { weekday: "short" }).slice(0, 3),
+      value: entry ? entry.totalTracked : 0,
+      isToday: iso === todayISO(),
+      isWorkday: isWorkingDay(iso)
+    });
+  }
+
+  const maxValue = Math.max(...days.map(day => day.value), 1);
+
+  lastSevenBars.innerHTML = "";
+
+  days.forEach(day => {
+    const height = day.value ? Math.max(8, Math.round((day.value / maxValue) * 100)) : 0;
+
+    const div = document.createElement("div");
+    div.className = `day-bar ${day.isToday ? "today" : ""}`;
+
+    div.innerHTML = `
+      <div class="day-bar-value">${day.value || "—"}</div>
+      <div class="day-bar-track" title="${day.iso}">
+        <div class="day-bar-fill" style="height:${height}%"></div>
+      </div>
+      <div class="day-bar-label">${day.label}</div>
+    `;
+
+    if (!day.isWorkday) {
+      div.style.opacity = "0.45";
+    }
+
+    lastSevenBars.appendChild(div);
+  });
 }
 
 function renderInsights(entries, todayEntry, selectedWeekEntries) {
   insightsList.innerHTML = "";
 
   if (!entries.length) {
-    addInsight("Start logging", "Add your first day and the dashboard will start finding records and trends.", "");
+    addInsight("Start logging", "Add your first day and the dashboard will start finding records, trends and workload patterns.", "");
     return;
   }
 
   const highest = getHighest(entries);
 
   if (todayEntry && highest && todayEntry.id === highest.id && entries.length > 1) {
-    addInsight("🏆 New highest day so far", `${todayEntry.totalTracked} tracked items is your best recorded day.`, "gold");
+    addInsight("🏆 New personal best", `${todayEntry.totalTracked} tracked items is your highest recorded day so far.`, "gold");
   } else if (highest) {
     addInsight("🏆 Highest day so far", `${highest.totalTracked} tracked items on ${formatShortDate(new Date(highest.date + "T00:00:00"))}.`, "gold");
   }
 
   const completion = getWeekCompletion(entries, selectedWeekDate);
-  addInsight("Workday completion", `${completion.logged} of ${completion.expected} expected workdays logged for this selected week.`, completion.logged === completion.expected && completion.expected > 0 ? "good" : "");
+  const completionType = completion.expected > 0 && completion.logged === completion.expected ? "good" : "";
+  addInsight("Workday completion", `${completion.logged} of ${completion.expected} expected workdays logged for this selected week.`, completionType);
+
+  const missed = calculateMissedWorkdays(entries);
+  if (missed > 0) {
+    addInsight("Missed workdays", `${missed} scheduled workday${missed === 1 ? "" : "s"} missing since your first logged workday.`, "bad");
+  }
 
   if (!isWorkingDay(todayISO())) {
     addInsight("Rest day ignored", "Today is not selected as a working day, so missing it will not break your streak.", "good");
   }
 
   if (todayEntry) {
+    const todayDate = new Date(todayEntry.date + "T00:00:00");
     const sameWeekdayPast = entries.filter(entry =>
       entry.date < todayEntry.date &&
-      new Date(entry.date + "T00:00:00").getDay() === new Date(todayEntry.date + "T00:00:00").getDay()
+      new Date(entry.date + "T00:00:00").getDay() === todayDate.getDay()
     );
+
     const sameDayAvg = average(sameWeekdayPast);
 
     if (sameDayAvg) {
       const diff = todayEntry.totalTracked - sameDayAvg;
       const result = formatChange(diff);
-      addInsight("Compared with this weekday average", `${result.text} versus your usual ${sameDayAvg}.`, diff >= 0 ? "good" : "bad");
+      addInsight("Weekday comparison", `${result.text} versus your usual ${sameDayAvg} for this weekday.`, diff >= 0 ? "good" : "bad");
+    }
+
+    const previousSameMode = entries
+      .filter(entry => entry.date < todayEntry.date && entry.mode === todayEntry.mode)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+    if (previousSameMode) {
+      const diff = todayEntry.totalTracked - previousSameMode.totalTracked;
+      const result = formatChange(diff);
+      addInsight("Same-mode comparison", `${result.text} versus your previous ${todayEntry.mode === "two" ? "two-round" : "one-round"} day.`, diff >= 0 ? "good" : "bad");
     }
   }
 
@@ -497,11 +597,13 @@ function renderInsights(entries, todayEntry, selectedWeekEntries) {
   if (selectedWeekAvg && lastFourWeekAverage) {
     const diff = selectedWeekAvg - lastFourWeekAverage;
     const result = formatChange(diff);
-    addInsight("Weekly trend", `${result.text} compared with your previous 4-week workday average of ${lastFourWeekAverage}.`, diff >= 0 ? "good" : "bad");
+    addInsight("4-week trend", `${result.text} compared with your previous 4-week workday average of ${lastFourWeekAverage}.`, diff >= 0 ? "good" : "bad");
   }
 
   const streak = calculateWorkdayStreak(entries);
-  if (streak >= 3) addInsight("🔥 Workday streak", `${streak} consecutive scheduled workdays logged up to your latest working-day entry.`, "good");
+  if (streak >= 3) {
+    addInsight("🔥 Workday streak", `${streak} consecutive scheduled workdays logged up to your latest working-day entry.`, "good");
+  }
 
   const bestWeekData = getBestWeek(entries);
   if (bestWeekData) {
